@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Limited Media Tracker</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      background: #f5f5f5;
+      color: #111;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Shared panel toolbar ── */
+    .panel-toolbar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 5px 8px;
+      background: #fff;
+      border-bottom: 1px solid #ccc;
+      flex-shrink: 0;
+    }
+    .panel-toolbar + .panel-toolbar {
+      border-top: none;
+    }
+
+    .panel-toolbar button {
+      padding: 4px 10px;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+      background: #f0f0f0;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .panel-toolbar button:hover { background: #e0e0e0; }
+    .panel-toolbar button.danger       { border-color: #d44; color: #d44; }
+    .panel-toolbar button.danger:hover { background: #fee; }
+    .panel-toolbar button.primary      { border-color: #448; background: #448; color: #fff; }
+    .panel-toolbar button.primary:hover { background: #336; }
+    .panel-toolbar button.accent       { border-color: #484; background: #484; color: #fff; }
+    .panel-toolbar button.accent:hover { background: #363; }
+
+    .panel-toolbar input[type="text"] {
+      padding: 4px 8px;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+      font-size: 12px;
+      background: #fff;
+    }
+    .panel-toolbar select {
+      padding: 4px 6px;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+      font-size: 12px;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    /* ── Split-button dropdown ── */
+    .split-btn {
+      position: relative;
+      display: inline-flex;
+    }
+    .split-btn > button:first-child {
+      border-radius: 3px 0 0 3px;
+      border-right: none;
+    }
+    .split-btn > .split-arrow {
+      padding: 4px 6px;
+      border: 1px solid #bbb;
+      border-radius: 0 3px 3px 0;
+      background: #f0f0f0;
+      cursor: pointer;
+      font-size: 10px;
+      line-height: 1.6;
+    }
+    .split-btn > .split-arrow:hover { background: #e0e0e0; }
+    .split-btn.primary > button:first-child { border-color: #448; background: #448; color: #fff; }
+    .split-btn.primary > button:first-child:hover { background: #336; }
+    .split-btn.primary > .split-arrow { border-color: #448; background: #336; color: #fff; }
+    .split-btn.primary > .split-arrow:hover { background: #225; }
+    .split-btn.danger > button:first-child { border-color: #d44; color: #d44; }
+    .split-btn.danger > button:first-child:hover { background: #fee; }
+    .split-btn.danger > .split-arrow { border-color: #d44; color: #d44; }
+    .split-btn.danger > .split-arrow:hover { background: #fee; }
+
+    .split-menu {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      min-width: 150px;
+      background: #fff;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+      z-index: 200;
+      margin-top: 2px;
+    }
+    .split-menu.open { display: block; }
+    .split-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 0;
+      background: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .split-menu button:hover { background: #f0f4ff; }
+    .split-menu button.danger { color: #d44; }
+    .split-menu button.danger:hover { background: #fee; }
+    .split-menu hr { border: none; border-top: 1px solid #eee; margin: 2px 0; }
+
+    /* ── Body (two panels) ── */
+    .body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Left panel: request list ── */
+    .left-panel {
+      flex: 1;
+      min-width: 0;
+      border-right: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+    }
+
+    .panel-header {
+      padding: 6px 10px;
+      font-weight: 600;
+      font-size: 12px;
+      color: #555;
+      border-bottom: 1px solid #ddd;
+      background: #fafafa;
+      flex-shrink: 0;
+    }
+
+    .request-list {
+      flex: 1;
+      overflow-y: auto;
+      min-height: 0;
+    }
+
+    /* ── Detail pane (bottom of left panel) ── */
+    .detail-pane {
+      border-top: 2px solid #ddd;
+      background: #fafafa;
+      flex-shrink: 0;
+      display: none;
+      flex-direction: column;
+      max-height: 220px;
+    }
+    .detail-pane.visible { display: flex; }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      padding: 4px 10px;
+      background: #f0f0f0;
+      border-bottom: 1px solid #ddd;
+      flex-shrink: 0;
+      gap: 6px;
+    }
+    .detail-header span {
+      flex: 1;
+      font-size: 11px;
+      font-weight: 600;
+      color: #444;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .detail-header button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #999;
+      font-size: 13px;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    .detail-header button:hover { color: #d44; }
+
+    .detail-body {
+      overflow-y: auto;
+      padding: 6px 10px;
+      font-size: 11px;
+      flex: 1;
+    }
+    .detail-row {
+      display: flex;
+      gap: 6px;
+      padding: 3px 0;
+      border-bottom: 1px solid #eee;
+      align-items: baseline;
+    }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label {
+      width: 72px;
+      flex-shrink: 0;
+      color: #888;
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .detail-value {
+      flex: 1;
+      font-family: 'Consolas', monospace;
+      color: #222;
+      word-break: break-all;
+      font-size: 11px;
+    }
+    .detail-value.url { color: #17a; }
+
+    .request-row {
+      padding: 4px 8px;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      font-size: 11px;
+    }
+    .request-row:hover { background: #f0f4ff; }
+    .request-row.selected { background: #dce8ff; }
+
+    .request-row-main {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .request-origin {
+      font-size: 10px;
+      color: #999;
+      font-family: 'Consolas', monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+      padding-left: 2px;
+    }
+
+    .request-col {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .request-url {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: 'Consolas', monospace;
+      color: #1a5;
+    }
+    .request-url.media   { color: #17a; }
+    .request-url.stream  { color: #a50; }
+    .request-url.sub     { color: #84a; }
+
+    .req-badge {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 2px;
+      font-size: 9px;
+      font-weight: bold;
+      text-transform: uppercase;
+      white-space: nowrap;
+      background: #eee;
+      color: #555;
+    }
+    .req-badge.STREAM   { background: #fff3cd; color: #856404; }
+    .req-badge.SUBTITLE { background: #cff4fc; color: #055160; }
+    .req-badge.VIDEO    { background: #f8d7da; color: #842029; }
+    .req-badge.AUDIO    { background: #d1e7dd; color: #0f5132; }
+    .req-badge.IMAGE    { background: #e2d9f3; color: #432874; }
+    .req-badge.XHR      { background: #d3f9d8; color: #1a5c2a; }
+    .req-badge.FETCH    { background: #d0ebff; color: #1864ab; }
+    .req-badge.DOCUMENT { background: #ffe8cc; color: #7c4a00; }
+    .req-badge.OTHER    { background: #e9ecef; color: #495057; }
+
+    .req-status { font-size: 10px; color: #777; width: 28px; text-align: right; flex-shrink: 0; }
+    .req-status.ok  { color: #198754; }
+    .req-status.err { color: #dc3545; font-weight: bold; }
+
+    /* ── Right panel: groups ── */
+    .right-panel {
+      width: 35%;
+      min-width: 220px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .groups-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: block;
+    }
+
+    .groups-area .group-card {
+      margin-bottom: 8px;
+    }
+
+    .groups-placeholder {
+      color: #aaa;
+      font-size: 12px;
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    /* ── Group card ── */
+    .group-card {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    /* ── Folder section header (super-grouping) ── */
+    .folder-section-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px 4px;
+      margin-top: 8px;
+      margin-bottom: 4px;
+      border-bottom: 2px solid #99b;
+    }
+    .folder-section-header:first-child { margin-top: 0; }
+    .folder-section-header img {
+      width: 20px;
+      height: 20px;
+      border-radius: 2px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .folder-section-header .fsh-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: #336;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+    .folder-section-header .fsh-id {
+      font-size: 10px;
+      color: #99b;
+      font-family: 'Consolas', monospace;
+    }
+    .folder-section-header.orphaned {
+      border-bottom-color: #c88;
+      background: #fff8f8;
+    }
+    .folder-section-header.orphaned .fsh-name { color: #a44; }
+    .folder-section-header.orphaned .fsh-id   { color: #c88; }
+
+    .folder-section-header.no-folder {
+      border-bottom-color: #bbb;
+    }
+    .folder-section-header.no-folder .fsh-name { color: #888; font-style: italic; }
+
+    .group-card-header {
+      display: flex;
+      align-items: center;
+      padding: 5px 8px;
+      background: #fafafa;
+      border-bottom: 1px solid #ddd;
+      gap: 6px;
+    }
+
+    .group-card-name {
+      flex: 1;
+      font-size: 12px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .group-card-close {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #999;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    .group-card-close:hover { color: #d44; }
+
+    .group-card-clean {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #bbb;
+      font-size: 12px;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    .group-card-clean:hover { color: #e07000; }
+
+    .group-card-body {
+      padding: 6px 8px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .type-btn {
+      padding: 4px 14px;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+      background: #f8f8f8;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .type-btn:hover { background: #e8e8e8; }
+    .type-btn.active { background: #dce8ff; border-color: #668; color: #336; }
+
+    .group-card-count {
+      font-size: 11px;
+      color: #888;
+      margin-left: auto;
+      align-self: center;
+    }
+
+    /* ── Summary bar ── */
+    .summary-bar {
+      padding: 3px 10px;
+      background: #f8f8f8;
+      border-top: 1px solid #ddd;
+      font-size: 10px;
+      color: #666;
+      flex-shrink: 0;
+    }
+
+    .group-card.ready-to-receive {
+      border-color: #448;
+      box-shadow: 0 0 0 2px #aabbd0;
+    }
+    .group-card.ready-to-receive .type-btn:not(.active):hover {
+      background: #dce8ff;
+      border-color: #448;
+      cursor: pointer;
+    }
+
+    /* ── Generate dialog ── */
+    .dialog-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .dialog-backdrop.open { display: flex; }
+
+    .dialog {
+      background: #fff;
+      border: 1px solid #bbb;
+      border-radius: 6px;
+      padding: 18px 20px;
+      min-width: 340px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    }
+    .dialog h3 {
+      font-size: 14px;
+      margin-bottom: 14px;
+      color: #222;
+    }
+    .dialog-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+    .dialog-row label {
+      width: 90px;
+      color: #555;
+      flex-shrink: 0;
+    }
+    .dialog-row select {
+      flex: 1;
+      padding: 4px 6px;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+      font-size: 12px;
+      background: #fff;
+    }
+    .dialog-preview {
+      margin: 12px 0 14px;
+      padding: 7px 10px;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      font-family: 'Consolas', monospace;
+      font-size: 11px;
+      color: #444;
+      min-height: 24px;
+    }
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .dialog-actions button {
+      padding: 5px 14px;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+      font-size: 12px;
+      cursor: pointer;
+      background: #f0f0f0;
+    }
+    .dialog-actions button:hover { background: #e0e0e0; }
+    .dialog-actions button.primary { background: #448; border-color: #448; color: #fff; }
+    .dialog-actions button.primary:hover { background: #336; }
+
+    /* ── Preferences — folder list ── */
+    .pref-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #444;
+      margin: 14px 0 6px;
+      border-top: 1px solid #ddd;
+      padding-top: 10px;
+    }
+    .pref-folder-import {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .pref-folder-import input {
+      flex: 1;
+      padding: 4px 8px;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+      font-size: 11px;
+      font-family: 'Consolas', monospace;
+    }
+    .pref-folder-import button {
+      padding: 4px 12px;
+      border: 1px solid #448;
+      border-radius: 3px;
+      background: #448;
+      color: #fff;
+      font-size: 11px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .pref-folder-import button:hover { background: #336; }
+    .pref-folder-list {
+      max-height: 140px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+    }
+    .pref-folder-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      border-bottom: 1px solid #eee;
+      font-size: 11px;
+    }
+    .pref-folder-row:last-child { border-bottom: none; }
+    .pref-folder-row img {
+      width: 24px;
+      height: 24px;
+      border-radius: 2px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .pref-folder-row .pf-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    .pref-folder-row .pf-id {
+      color: #999;
+      font-size: 10px;
+      font-family: 'Consolas', monospace;
+    }
+    .pref-folder-row button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #bbb;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0 2px;
+      flex-shrink: 0;
+    }
+    .pref-folder-row button:hover { color: #d44; }
+    .pref-folder-empty {
+      padding: 8px;
+      color: #aaa;
+      font-size: 11px;
+      text-align: center;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #aaa; }
+  </style>
+</head>
+<body>
+
+  <!-- Two-panel body — each panel has its own stacked toolbars -->
+  <div class="body">
+
+    <!-- Left: request list -->
+    <div class="left-panel">
+      <!-- Left toolbar row 1: actions -->
+      <div class="panel-toolbar">
+        <button class="danger" id="clearLogBtn">Clear</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="prefsBtn">Preferences</button>
+      </div>
+      <!-- Left toolbar row 2: filter -->
+      <div class="panel-toolbar">
+        <input type="text" id="searchInput" placeholder="Filter requests…" style="flex:1;min-width:80px;">
+        <select id="filterSelect">
+          <option value="all">All Types</option>
+          <option value="m3u8_vtt">M3U8 + VTT</option>
+          <option value="STREAM">Stream (m3u8/mpd)</option>
+          <option value="SUBTITLE">Subtitles (VTT)</option>
+          <option value="VIDEO">Video</option>
+          <option value="AUDIO">Audio</option>
+          <option value="IMAGE">Image</option>
+          <option value="XHR">XHR</option>
+        </select>
+      </div>
+
+      <div class="request-list" id="requestList"></div>
+      <div class="detail-pane" id="detailPane">
+        <div class="detail-header">
+          <span id="detailTitle">Request Detail</span>
+          <button id="detailCloseBtn" title="Close">×</button>
+        </div>
+        <div class="detail-body" id="detailBody"></div>
+      </div>
+    </div>
+
+    <!-- Right: groups -->
+    <div class="right-panel">
+      <!-- Right toolbar row 1: create + actions -->
+      <div class="panel-toolbar">
+        <input type="text" id="newGroupInput" placeholder="Group name…" style="flex:1;min-width:60px;">
+        <select id="newGroupType">
+          <option value="m3u8_vtt">M3U8 &amp; VTT</option>
+          <option value="file">File</option>
+        </select>
+        <button id="addGroupBtn">+</button>
+        <button class="accent" id="generateBtn">Generate</button>
+      </div>
+      <!-- Right toolbar row 2: folder + export + clear -->
+      <div class="panel-toolbar">
+        <select id="defaultFolderSelect" style="flex:1;min-width:60px;">
+          <option value="">No Folder</option>
+        </select>
+
+        <!-- Export split-button -->
+        <div class="split-btn primary">
+          <button id="exportAllBtn">Export</button>
+          <button class="split-arrow" id="exportMenuToggle" title="More export options">▾</button>
+          <div class="split-menu" id="exportMenu">
+            <button id="exportJsonBtn">Export JSON</button>
+            <button id="exportMdBtn">Export Markdown</button>
+          </div>
+        </div>
+
+        <!-- Clear split-button -->
+        <div class="split-btn danger">
+          <button id="clearFilledBtn">Clear Filled</button>
+          <button class="split-arrow" id="clearMenuToggle" title="More clear options">▾</button>
+          <div class="split-menu" id="clearMenu">
+            <button id="clearFilledMenuBtn" class="danger">Clear Filled Groups</button>
+            <hr>
+            <button id="clearGroupsBtn" class="danger">Clear All Groups</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="groups-area" id="groupsArea">
+        <div class="groups-placeholder" id="groupsPlaceholder">
+          No groups yet — create one above.
+        </div>
+      </div>
+      <div class="summary-bar" id="summaryBar">Ready.</div>
+    </div>
+
+  </div>
+
+  <!-- Generate dialog -->
+  <div class="dialog-backdrop" id="generateBackdrop">
+    <div class="dialog">
+      <h3>Generate Episode Groups</h3>
+      <div class="dialog-row">
+        <label>Season</label>
+        <select id="genSeason"></select>
+      </div>
+      <div class="dialog-row">
+        <label>Episode from</label>
+        <select id="genEpFrom"></select>
+      </div>
+      <div class="dialog-row">
+        <label>Episode to</label>
+        <select id="genEpTo"></select>
+      </div>
+      <div class="dialog-row">
+        <label>Type</label>
+        <select id="genType">
+          <option value="m3u8_vtt">M3U8 &amp; VTT</option>
+          <option value="file">File</option>
+        </select>
+      </div>
+      <div class="dialog-row">
+        <label>Extension</label>
+        <input type="text" id="genExtension" placeholder="optional, e.g. J" maxlength="20" style="flex:1;padding:4px 6px;border:1px solid #bbb;border-radius:3px;font-size:12px;">
+      </div>
+      <div class="dialog-preview" id="genPreview"></div>
+      <div class="dialog-actions">
+        <button id="genCancelBtn">Cancel</button>
+        <button class="primary" id="genConfirmBtn">Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preferences dialog -->
+  <div class="dialog-backdrop" id="prefsBackdrop">
+    <div class="dialog" style="min-width:460px;">
+      <h3>Preferences</h3>
+
+      <!-- Exclusions -->
+      <div style="font-size:11px;color:#666;margin-bottom:8px;">
+        URL exclusion list — any request whose URL contains one of these strings will be hidden from the list.<br>
+        Separate entries with <strong>;</strong> &nbsp;·&nbsp; Saved automatically to local storage.
+      </div>
+      <textarea id="prefsExclude" rows="4" style="width:100%;padding:6px 8px;border:1px solid #bbb;border-radius:3px;font-size:11px;font-family:'Consolas',monospace;resize:vertical;" placeholder="e.g. master.m3u8;/ads/;tracking.js"></textarea>
+      <div style="font-size:10px;color:#aaa;margin-top:4px;" id="prefsCount"></div>
+
+      <!-- Known Folders -->
+      <div class="pref-section-title">Known Folders</div>
+      <div style="font-size:11px;color:#666;margin-bottom:6px;">
+        Paste a base64 string copied from the Media Browser (⋮ → Copy Tracker Import).
+      </div>
+      <div class="pref-folder-import">
+        <input type="text" id="prefsFolderPaste" placeholder="Paste base64 folder string here…">
+        <button id="prefsFolderImportBtn">Import</button>
+      </div>
+      <div id="prefsFolderError" style="font-size:10px;color:#c33;margin-bottom:6px;display:none;"></div>
+      <div class="pref-folder-list" id="prefsFolderList">
+        <div class="pref-folder-empty" id="prefsFolderEmpty">No folders added yet.</div>
+      </div>
+
+      <!-- Import / Export -->
+      <div class="pref-section-title">Import / Export</div>
+      <div style="font-size:11px;color:#666;margin-bottom:8px;">
+        Export saves exclusions, folders, and all groups to clipboard. Import restores them.
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        <button id="prefsExportJsonBtn">Export JSON</button>
+        <button id="prefsExportMdBtn">Export MD</button>
+        <button id="prefsImportJsonBtn">Import JSON…</button>
+      </div>
+      <div id="prefsImportArea" style="display:none;">
+        <textarea id="prefsImportInput" rows="4" style="width:100%;padding:6px 8px;border:1px solid #bbb;border-radius:3px;font-size:11px;font-family:'Consolas',monospace;resize:vertical;" placeholder="Paste exported JSON here…"></textarea>
+        <div id="prefsImportError" style="font-size:10px;color:#c33;margin-top:4px;display:none;"></div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button id="prefsImportCancelBtn">Cancel</button>
+          <button class="primary" id="prefsImportConfirmBtn">Import</button>
+        </div>
+      </div>
+
+      <div class="dialog-actions" style="margin-top:14px;">
+        <button id="prefsCancelBtn">Cancel</button>
+        <button class="primary" id="prefsSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="window.js"></script>
+</body>
+</html>
