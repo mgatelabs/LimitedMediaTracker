@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Limited Media Tracker",
-  "version": "2026.2.1",
+  "version": "2026.2.5",
   "description": "Track and categorize HTTP requests (media-focused)",
   "permissions": [
     "webRequest",
@@ -20,7 +20,12 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "limitedmediatracker@mgatelabs.com",
-      "strict_min_version": "102.0"
+      "strict_min_version": "102.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
     }
   },
   "icons": {

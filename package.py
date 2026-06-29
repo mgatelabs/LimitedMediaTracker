@@ -68,7 +68,7 @@ def next_version():
     data[year] = {quarter: build}
     save_version(data)
 
-    return f"{year}.{quarter}.{build:03d}", data
+    return f"{year}.{quarter}.{build}", data
 
 
 # ── manifest.json update ───────────────────────────────────────────────────────
