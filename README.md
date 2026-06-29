@@ -41,7 +41,26 @@ This extension is a companion tool for the **Limited Media Server** project — 
 
 ## Screenshots
 
-> _(add screenshots here)_
+**Main tracker window** — live request capture on the left, group management on the right
+
+![window](./window.png)
+
+**Generate panel** — bulk-create episode groups in one click
+
+![generate](./generate.png)
+
+
+**Preferences dialog** — configure exclusions, known folders, and import/export settings
+
+![preferences](./preferences.png)
+
+**Quick start walkthrough** — step-by-step flow for new users
+
+![steps1](./steps1.png)
+
+**Import server data** — paste base64 folder metadata from the companion app
+
+![importserver](./importserver.png)
 
 ---
 
