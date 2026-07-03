@@ -53,6 +53,12 @@ function renderFolderDropdown() {
 
 $("defaultFolderSelect").addEventListener("change", function () {
   defaultFolderId = this.value;
+  if (this.value) {
+    requestAnimationFrame(function () {
+      var hdr = document.getElementById(this.value);
+      if (hdr) hdr.scrollIntoView({ block: "start" });
+    }.bind(this));
+  }
 });
 
 /* ═══════════════════════════ Arrow key navigation ═══════════ */
@@ -261,6 +267,7 @@ function renderGroups() {
   var isFirst = true;
   orderedKeys.forEach(function (fid) {
     var hdr = document.createElement("div");
+    hdr.id = fid;
     hdr.className = "folder-section-header" + (isFirst ? " first" : "");
 
     if (fid === "") {
@@ -857,24 +864,29 @@ $("prefsFolderImportBtn").addEventListener("click", function () {
     return;
   }
 
-  // Deduplicate by id
-  var exists = false;
+  // Find existing folder by id
+  var idx = -1;
   for (var i = 0; i < knownFolders.length; i++) {
-    if (knownFolders[i].id === data.id) { exists = true; break; }
-  }
-  if (exists) {
-    errEl.textContent = "Folder \"" + data.name + "\" (" + data.id + ") is already in the list.";
-    errEl.style.display = "";
-    return;
+    if (knownFolders[i].id === data.id) { idx = i; break; }
   }
 
-  knownFolders.push({
-    id:       data.id,
-    name:     data.name,
-    rating:   data.rating   != null ? data.rating   : 0,
-    info_url: data.info_url || "",
-    preview:  data.preview  || ""
-  });
+  if (idx !== -1) {
+    // Update existing folder
+    knownFolders[idx].name     = data.name;
+    knownFolders[idx].rating   = data.rating   != null ? data.rating   : 0;
+    knownFolders[idx].info_url = data.info_url || "";
+    knownFolders[idx].preview  = data.preview  || "";
+  } else {
+    // Add new folder
+    knownFolders.push({
+      id:       data.id,
+      name:     data.name,
+      rating:   data.rating   != null ? data.rating   : 0,
+      info_url: data.info_url || "",
+      preview:  data.preview  || ""
+    });
+  }
+
   knownFolders.sort(function (a, b) { return a.name.localeCompare(b.name); });
   saveKnownFolders();
   renderFolderDropdown();
