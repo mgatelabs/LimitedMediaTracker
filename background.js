@@ -1,10 +1,27 @@
 // Store all captured data
 let requestLog = [];
 let requestMap = {};   // id -> entry, for fast header lookups
+let urlSet     = {};   // url -> log entry, for dedup + hit counting
 let groups = {};
 let groupOrder = [];
 let isPaused = false;
 let excludePatterns = [];
+let activeFilter = 'all';  // mirrors the window's filter dropdown
+
+const LOG_MAX = 500;
+
+function passesFilter(url, category) {
+  if (activeFilter === 'all') return true;
+  if (activeFilter === 'm3u8_vtt') {
+    if (category === 'SCRIPT' || category === 'STYLESHEET' || category === 'FONT' ||
+        category === 'DOCUMENT' || category === 'iframe') return false;
+    if (category === 'STREAM' || category === 'SUBTITLE') return true;
+    // Only match .m3u8 / .vtt against the path — never the query string
+    const path = (url || '').toLowerCase().split('?')[0].split('#')[0];
+    return path.includes('.m3u8') || path.includes('.vtt');
+  }
+  return category === activeFilter;
+}
 
 function isExcluded(url) {
   if (!excludePatterns.length) return false;
@@ -281,16 +298,26 @@ chrome.webRequest.onBeforeRequest.addListener(function (details) {
   if (isPaused) return;
   if (isExcluded(details.url)) return;
 
-  const info = extractRequestInfo(details);
-  requestLog.push(info);
-  requestMap[details.id] = info;   // index by id for header lookup
-  
-  // Auto-detect media requests and try to match/create groups
-  if (info.mediaType && !info._groupAssigned) {
-    autoMatchMediaRequest(info);
+  // Dedup — increment hit count on existing entry and skip
+  if (urlSet[details.url]) {
+    urlSet[details.url].hitCount = (urlSet[details.url].hitCount || 1) + 1;
+    return;
   }
 
-  saveState();
+  const info = extractRequestInfo(details);
+
+  // Apply active filter — only log requests that match
+  if (!passesFilter(info.url, info.category)) return;
+
+  // Enforce max log size — drop oldest entry when at cap
+  if (requestLog.length >= LOG_MAX) {
+    const removed = requestLog.shift();
+    if (removed) delete urlSet[removed.url];
+  }
+
+  requestLog.push(info);
+  urlSet[info.url] = info;   // store reference for hit counting
+  requestMap[details.id] = info;   // index by id for header lookup
 
   return { cancel: false };
 }, {
@@ -407,6 +434,7 @@ chrome.webRequest.onErrorOccurred.addListener(function (details) {
       id: Date.now(), url: details.url || 'Unknown URL', type: 'other'
     });
     info.statusCode = -1;
+    if (!passesFilter(info.url, info.category)) return;
     requestLog.push(info);
     saveState();
   } else {
@@ -495,11 +523,15 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.action === 'set-excludes') {
     excludePatterns = (request.patterns || []).map(p => p.toLowerCase()).filter(Boolean);
     sendResponse({ ok: true });
+  } else if (request.action === 'set-filter') {
+    activeFilter = request.filter || 'all';
+    sendResponse({ ok: true });
   } else if (request.action === 'getLog') {
     sendResponse({ log: requestLog, count: requestLog.length });
   } else if (request.action === 'clearLog') {
     requestLog = [];
     requestMap = {};
+    urlSet = {};
     chrome.storage.local.remove('log');
     sendResponse({ cleared: true });
   } else if (request.action === 'pause') {
@@ -575,6 +607,7 @@ chrome.contextMenus.onClicked.addListener(function (info) {
   } else if (info.menuItemId === 'clear-requests') {
     requestLog = [];
     requestMap = {};
+    urlSet = {};
     chrome.storage.local.remove('log');
   }
 });

@@ -5,28 +5,85 @@ var groupOrder      = [];
 var isPaused        = false;
 var selectedRequest = null;
 var visibleList     = [];   // current filtered list, kept in sync for arrow navigation
-var knownFolders    = [];   // loaded from localStorage — array of {id,name,preview,...}
+var knownFolders    = [];   // array of {id,name,preview,...}
 var defaultFolderId = "";   // "" = No Selection
 
 function $(id) { return document.getElementById(id); }
 
 /* ═══════════════════════════ Boot ════════════════════════════ */
-loadPrefs();
-loadKnownFolders();
-loadGroups();
-refreshLog();
-setInterval(refreshLog, 2000);
 
-/* ═══════════════════════════ Known Folders ═══════════════════ */
-function loadKnownFolders() {
-  try {
-    knownFolders = JSON.parse(localStorage.getItem("mediatracker_folders") || "[]");
-  } catch(e) { knownFolders = []; }
-  renderFolderDropdown();
+function hideLoading() {
+  var el = $("loadingOverlay");
+  if (el) el.style.display = "none";
 }
 
+function initApp() {
+  // Migrate any old localStorage keys to chrome.storage.local (one-time)
+  var migrations = {};
+  var oldExclude = localStorage.getItem("mediatracker_exclude");
+  var oldFolders = localStorage.getItem("mediatracker_folders");
+  var oldFilter  = localStorage.getItem("mediatracker_filter");
+  if (oldExclude !== null) { migrations["mediatracker_exclude"] = oldExclude; localStorage.removeItem("mediatracker_exclude"); }
+  if (oldFolders !== null) { migrations["mediatracker_folders"] = oldFolders; localStorage.removeItem("mediatracker_folders"); }
+  if (oldFilter  !== null) { migrations["mediatracker_filter"]  = oldFilter;  localStorage.removeItem("mediatracker_filter"); }
+
+  function doInit(extra) {
+    // extra = any migrated values to merge in before loading
+    var keys = ["mediatracker_exclude", "mediatracker_folders", "mediatracker_filter"];
+    browser.storage.local.get(keys, function (data) {
+      // Apply migrations (only if key not already in extension storage)
+      var toWrite = {};
+      if (extra["mediatracker_exclude"] !== undefined && data["mediatracker_exclude"] === undefined)
+        toWrite["mediatracker_exclude"] = extra["mediatracker_exclude"];
+      if (extra["mediatracker_folders"] !== undefined && data["mediatracker_folders"] === undefined)
+        toWrite["mediatracker_folders"] = extra["mediatracker_folders"];
+      if (extra["mediatracker_filter"]  !== undefined && data["mediatracker_filter"]  === undefined)
+        toWrite["mediatracker_filter"]  = extra["mediatracker_filter"];
+
+      function afterMigration() {
+        browser.storage.local.get(keys, function (d) {
+          // Load exclusions
+          var rawExclude = d["mediatracker_exclude"] || "";
+          excludePatterns = rawExclude.split(";").map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+
+          // Load folders
+          try { knownFolders = JSON.parse(d["mediatracker_folders"] || "[]"); } catch(e) { knownFolders = []; }
+
+          // Load filter
+          var savedFilter = d["mediatracker_filter"] || "all";
+          if ($("filterSelect").querySelector('option[value="' + savedFilter + '"]')) {
+            $("filterSelect").value = savedFilter;
+          }
+
+          // Push prefs to background
+          sendExcludesToBackground();
+          browser.runtime.sendMessage({ action: "set-filter", filter: $("filterSelect").value }).catch(function () {});
+
+          // Render
+          renderFolderDropdown();
+          loadGroups();
+          refreshLog();
+          setInterval(refreshLog, 2000);
+
+          hideLoading();
+        });
+      }
+
+      if (Object.keys(toWrite).length) {
+        browser.storage.local.set(toWrite, afterMigration);
+      } else {
+        afterMigration();
+      }
+    });
+  }
+
+  doInit(migrations);
+}
+
+/* ═══════════════════════════ Known Folders ═══════════════════ */
+
 function saveKnownFolders() {
-  localStorage.setItem("mediatracker_folders", JSON.stringify(knownFolders));
+  browser.storage.local.set({ "mediatracker_folders": JSON.stringify(knownFolders) });
 }
 
 function folderById(id) {
@@ -122,27 +179,13 @@ function buildAssignedUrls() {
 
 /* ═══════════════════════════ Left panel ══════════════════════ */
 function renderRequestList() {
-  var filter   = $("filterSelect").value;
   var search   = $("searchInput").value.toLowerCase();
   var assigned = buildAssignedUrls();
 
   var list = requestLog.filter(function (r) {
-    return !assigned[r.url] && !isExcluded(r.url);
+    return !assigned[r.url];
   });
 
-  if (filter === "m3u8_vtt") {
-    list = list.filter(function (r) {
-      var u = (r.url || "").toLowerCase();
-      // Exclude scripts, stylesheets, fonts, documents regardless of URL
-      var cat = r.category || "";
-      if (cat === "SCRIPT" || cat === "STYLESHEET" || cat === "FONT" ||
-          cat === "DOCUMENT" || cat === "iframe") return false;
-      return cat === "STREAM" || cat === "SUBTITLE" ||
-             u.includes(".m3u8") || u.includes(".vtt");
-    });
-  } else if (filter !== "all") {
-    list = list.filter(function (r) { return r.category === filter; });
-  }
   if (search) {
     list = list.filter(function (r) {
       return ((r.url || "").toLowerCase().includes(search)) ||
@@ -197,6 +240,14 @@ function buildRequestRow(r, vi) {
   statusEl.className = "req-status" + (st === -1 ? " err" : (st >= 200 && st < 400 ? " ok" : ""));
   statusEl.textContent = (st == null) ? "" : (st === -1 ? "ERR" : String(st));
   mainLine.appendChild(statusEl);
+
+  if (r.hitCount && r.hitCount > 1) {
+    var hitEl = document.createElement("span");
+    hitEl.className = "req-hit-count";
+    hitEl.textContent = "×" + r.hitCount;
+    hitEl.title = "Seen " + r.hitCount + " times";
+    mainLine.appendChild(hitEl);
+  }
 
   col.appendChild(mainLine);
 
@@ -337,6 +388,68 @@ function buildGroupCard(name, grp) {
     });
   })(name, grp);
 
+  // AUTO button — only for m3u8_vtt groups
+  var autoBtn = null;
+  if ((grp.type || "m3u8_vtt") === "m3u8_vtt") {
+    autoBtn = document.createElement("button");
+    autoBtn.className = "group-card-auto";
+    autoBtn.textContent = "Auto";
+    autoBtn.title = "Auto-assign first unassigned STREAM and SUBTITLE from the visible list";
+    (function (n) {
+      autoBtn.addEventListener("click", function () {
+        // Clear existing items first so we always start fresh
+        browser.runtime.sendMessage({ action: "group-clear-items", name: n }, function () {
+          // Build assigned set excluding this group (its items were just cleared)
+          var assigned = {};
+          for (var gi = 0; gi < groupOrder.length; gi++) {
+            if (groupOrder[gi] === n) continue;
+            var reqs = (groups[groupOrder[gi]] || {}).requests || [];
+            for (var ri = 0; ri < reqs.length; ri++) {
+              if (reqs[ri].url) assigned[reqs[ri].url] = true;
+            }
+          }
+          var unassigned = requestLog.filter(function (r) { return !assigned[r.url]; });
+
+          var stream   = null;
+          var subtitle = null;
+          for (var i = unassigned.length - 1; i >= 0; i--) {
+            var r = unassigned[i];
+            if (!stream   && (r.category === "STREAM"   || r.mediaType === "STREAM"))   stream   = r;
+            if (!subtitle && (r.category === "SUBTITLE" || r.mediaType === "SUBTITLE")) subtitle = r;
+            if (stream && subtitle) break;
+          }
+
+          if (!stream && !subtitle) { loadGroups(); return; }
+
+          var toAssign = [stream, subtitle].filter(Boolean);
+          var done = 0;
+          toAssign.forEach(function (r) {
+            browser.runtime.sendMessage({
+              action: "group-add-item",
+              groupName: n,
+              request: {
+                url:          r.url,
+                method:       r.method        || "GET",
+                typeLabel:    r.typeLabel     || r.type || "",
+                category:     r.category      || "OTHER",
+                mediaType:    r.mediaType     || null,
+                timestamp:    r.timestamp     || Date.now(),
+                statusCode:   r.statusCode,
+                originUrl:    r.originUrl     || "",
+                documentUrl:  r.documentUrl   || "",
+                referer:      r.referer       || "",
+                originHeader: r.originHeader  || "",
+              }
+            }, function () {
+              done++;
+              if (done === toAssign.length) loadGroups();
+            });
+          });
+        }); // end group-clear-items callback
+      });
+    })(name);
+  }
+
   var closeBtn = document.createElement("button");
   closeBtn.className = "group-card-close";
   closeBtn.textContent = "×";
@@ -349,6 +462,7 @@ function buildGroupCard(name, grp) {
 
   hdr.appendChild(nameEl);
   hdr.appendChild(countEl);
+  if (autoBtn) hdr.appendChild(autoBtn);
   hdr.appendChild(cleanBtn);
   hdr.appendChild(closeBtn);
   card.appendChild(hdr);
@@ -482,14 +596,8 @@ function assignSelected(groupName) {
 /* ═══════════════════════════ Preferences ════════════════════ */
 var excludePatterns = [];  // array of lowercase strings
 
-function loadPrefs() {
-  var raw = localStorage.getItem("mediatracker_exclude") || "";
-  excludePatterns = raw.split(";").map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
-  sendExcludesToBackground();
-}
-
 function savePrefs(raw) {
-  localStorage.setItem("mediatracker_exclude", raw);
+  browser.storage.local.set({ "mediatracker_exclude": raw });
   excludePatterns = raw.split(";").map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
   sendExcludesToBackground();
 }
@@ -508,7 +616,7 @@ function isExcluded(url) {
 }
 
 $("prefsBtn").addEventListener("click", function () {
-  var raw = localStorage.getItem("mediatracker_exclude") || "";
+  var raw = excludePatterns.join(";");
   $("prefsExclude").value = raw;
   updatePrefsCount(raw);
   renderPrefsFolderList();
@@ -546,7 +654,7 @@ function buildPrefsSnapshot() {
   return {
     version:    1,
     exportedAt: new Date().toISOString(),
-    exclusions: ($("prefsExclude").value || localStorage.getItem("mediatracker_exclude") || "")
+    exclusions: ($("prefsExclude").value || excludePatterns.join(";"))
                   .split(";").map(function (s) { return s.trim(); }).filter(Boolean),
     folders:    knownFolders,
     groups:     groupOrder.map(function (key) {
@@ -1192,18 +1300,23 @@ $("genConfirmBtn").addEventListener("click", function () {
 });
 
 $("filterSelect").addEventListener("change", function () {
-  localStorage.setItem("mediatracker_filter", this.value);
-  renderRequestList();
+  var val = this.value;
+  browser.storage.local.set({ "mediatracker_filter": val });
+  // Push filter to background, then clear the log so it refills with matching items only
+  browser.runtime.sendMessage({ action: "set-filter", filter: val }, function () {
+    browser.runtime.sendMessage({ action: "clearLog" }, function () {
+      requestLog = [];
+      selectedRequest = null;
+      renderRequestList();
+      renderDetail();
+      updateSummary();
+    });
+  });
 });
-$("searchInput").addEventListener("input",  renderRequestList);
+$("searchInput").addEventListener("input", renderRequestList);
 
-// Restore saved filter on load
-(function () {
-  var saved = localStorage.getItem("mediatracker_filter");
-  if (saved && $("filterSelect").querySelector('option[value="' + saved + '"]')) {
-    $("filterSelect").value = saved;
-  }
-})();
+// Filter and exclusions are restored inside initApp() — kick off boot
+initApp();
 
 /* ═══════════════════════════ Summary ════════════════════════ */
 function updateSummary() {

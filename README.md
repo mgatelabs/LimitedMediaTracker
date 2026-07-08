@@ -66,16 +66,16 @@ This extension is a companion tool for the **Limited Media Server** project — 
 
 ## Installation
 
-This extension is not yet published to AMO. Source code is available at
-[github.com/mgatelabs/LimitedMediaTracker](https://github.com/mgatelabs/LimitedMediaTracker).
+Available on the Firefox Add-ons store:
+**[addons.mozilla.org/en-US/firefox/addon/limited-media-tracker/](https://addons.mozilla.org/en-US/firefox/addon/limited-media-tracker/)**
 
-Load it temporarily in Firefox:
+To load the development version temporarily in Firefox:
 
 1. Open `about:debugging` in Firefox
 2. Click **This Firefox** → **Load Temporary Add-on**
 3. Select the `manifest.json` file from this folder
 
-The extension icon will appear in your toolbar. Click it to open the tracker window.
+Source code: [github.com/mgatelabs/LimitedMediaTracker](https://github.com/mgatelabs/LimitedMediaTracker)
 
 ---
 
@@ -99,10 +99,10 @@ The extension icon will appear in your toolbar. Click it to open the tracker win
 │  [Search…] [Filter ▼]       │  [Folder ▼] [Export ▼] [Clear▼]│
 ├─────────────────────────────┼───────────────────────────────┤
 │                             │  ── My Show ──────────────    │
-│  STREAM  host/…/master.m3u8 │  ┌─ S01E01  1 items  ⌫  × ─┐ │
+│  STREAM  host/…/master.m3u8 │  ┌─ S01E01  1 items Auto ⌫ ×┐ │
 │  ↳ https://example.com      │  │  [✅ M3U8 (1)]  [VTT]    │ │
 │                             │  └──────────────────────────┘ │
-│  SUBTITLE host/…/subs.vtt   │  ┌─ S01E02  ⌫  × ───────────┐ │
+│  SUBTITLE host/…/subs.vtt   │  ┌─ S01E02  Auto ⌫  × ───────┐ │
 │  ↳ https://example.com      │  │  [M3U8]  [VTT]           │ │
 │                             │  └──────────────────────────┘ │
 ├─────────────────────────────┤                               │
@@ -114,7 +114,7 @@ The extension icon will appear in your toolbar. Click it to open the tracker win
 
 **Left panel** — captured requests, newest first. Click a row to select it and see full details in the pane below. Requests already assigned to a group disappear from this list automatically.
 
-**Right panel** — your groups. Each card shows the group name, item count, a clean (⌫) button to clear items while keeping the group, and a delete (×) button. Groups are sorted alphabetically within their folder.
+**Right panel** — your groups. Each card shows the group name, item count, an **Auto** button (M3U8 & VTT groups only) to auto-assign the newest stream and subtitle from the list, a clean (⌫) button to clear items while keeping the group, and a delete (×) button. Groups are sorted alphabetically within their folder.
 
 ---
 
@@ -151,7 +151,7 @@ Right-click anywhere on a page for two quick actions:
 |----------|----------|
 | [export.md](export.md) | Export formats — JSON (base64), Markdown, field reference |
 | [import.md](import.md) | Preferences import/export, folder import, snapshot format |
-| [storage.md](storage.md) | Where and how data is stored — chrome.storage, localStorage |
+| [storage.md](storage.md) | Where and how data is stored — all in `chrome.storage.local` |
 | [processing.md](processing.md) | Request capture pipeline, category detection, message API |
 
 ---

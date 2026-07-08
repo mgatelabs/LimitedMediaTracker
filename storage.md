@@ -1,19 +1,24 @@
 # Storage
 
-The extension uses two separate storage mechanisms — one for groups (background-accessible) and one for preferences (window-only).
+All persistent data is stored in `chrome.storage.local`, accessible from both the background service worker and the tracker window. `localStorage` is not used.
 
 ---
 
-## Groups — `chrome.storage.local`
+## All keys — `chrome.storage.local`
 
-Groups and their request lists are persisted by the background service worker. State is saved after every mutation (create, delete, rename, add item, clear items, clear folder).
+| Key | Written by | Description |
+|-----|-----------|-------------|
+| `groups` | background | Object mapping storage key → group object |
+| `groupOrder` | background | Array of storage keys in creation order |
+| `mediatracker_exclude` | window | Semicolon-delimited URL exclusion keywords |
+| `mediatracker_folders` | window | JSON-encoded array of known folder objects |
+| `mediatracker_filter` | window | Last-used filter dropdown value |
 
-### Keys stored
+---
 
-| Key | Value |
-|-----|-------|
-| `groups` | Object mapping storage key → group object |
-| `groupOrder` | Array of storage keys in creation order |
+## Groups
+
+Groups and their request lists are persisted by the background service worker after every mutation (create, delete, rename, add item, clear items, clear folder).
 
 ### Group object
 
@@ -48,25 +53,27 @@ When a group has a folder: the key is `displayName~folderId` (e.g. `S01E01~f7a3c
 
 This allows two groups with the same name to exist in different folders without colliding in the object. Because `~` is used as the separator, group names are validated to disallow it — the UI rejects names containing `~` and `createGroup` returns `null` for them.
 
-### Request log
-
-`requestLog` and `requestMap` live in memory only inside the background service worker. They are **not** persisted to storage and reset whenever the extension reloads. The window polls `getLog` every 2 seconds to stay in sync.
-
 ---
 
-## Preferences — `localStorage` (window)
+## Preferences
 
-Preferences are stored in the tracker window's `localStorage`. They are re-applied each time the window opens.
+Preference keys are read and written by the tracker window on load and on save. On first launch after an upgrade from an older version, any values found in `localStorage` under these keys are automatically migrated to `chrome.storage.local` and the old keys are removed.
 
 | Key | Format | Description |
 |-----|--------|-------------|
 | `mediatracker_exclude` | `"pattern1;pattern2"` | Semicolon-delimited URL exclusion keywords |
-| `mediatracker_folders` | JSON array | Known folder objects (id, name, rating, info_url, preview) |
+| `mediatracker_folders` | JSON array string | Known folder objects (id, name, rating, info_url, preview) |
 | `mediatracker_filter` | string | Last-used filter dropdown value (restored on open) |
 
-### Exclusion sync
+### Filter and exclusion sync
 
-On window load, and whenever the exclusion list is saved, the patterns are pushed to the background service worker via a `set-excludes` message so newly captured requests are also filtered at source.
+On window load, after reading storage, both the active filter and exclusion patterns are pushed to the background service worker (`set-filter` and `set-excludes` messages) so that newly captured requests are filtered at source before entering the log.
+
+---
+
+## Request log
+
+`requestLog`, `requestMap`, and `urlSet` live in memory only inside the background service worker. They are **not** persisted to storage and reset whenever the extension reloads. The window polls `getLog` every 2 seconds to stay in sync. The log is capped at 500 entries (oldest dropped first) and deduplicates by URL (repeated hits increment a `hitCount` counter on the existing entry).
 
 ---
 
@@ -78,7 +85,9 @@ Browser request
     ▼
 background.js (onBeforeRequest)
     │  isExcluded? → drop
-    │  extractRequestInfo() → push to requestLog (memory)
+    │  passesFilter? → drop
+    │  urlSet dedup → increment hitCount and drop if seen
+    │  extractRequestInfo() → push to requestLog (memory, max 500)
     │
     ▼ (onBeforeSendHeaders)
     Attach Referer + Origin headers to log entry
