@@ -18,66 +18,28 @@ function hideLoading() {
 }
 
 function initApp() {
-  // Migrate any old localStorage keys to chrome.storage.local (one-time)
-  var migrations = {};
-  var oldExclude = localStorage.getItem("mediatracker_exclude");
-  var oldFolders = localStorage.getItem("mediatracker_folders");
-  var oldFilter  = localStorage.getItem("mediatracker_filter");
-  if (oldExclude !== null) { migrations["mediatracker_exclude"] = oldExclude; localStorage.removeItem("mediatracker_exclude"); }
-  if (oldFolders !== null) { migrations["mediatracker_folders"] = oldFolders; localStorage.removeItem("mediatracker_folders"); }
-  if (oldFilter  !== null) { migrations["mediatracker_filter"]  = oldFilter;  localStorage.removeItem("mediatracker_filter"); }
+  var keys = ["mediatracker_exclude", "mediatracker_folders", "mediatracker_filter"];
+  browser.storage.local.get(keys, function (d) {
+    var rawExclude = d["mediatracker_exclude"] || "";
+    excludePatterns = rawExclude.split(";").map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
 
-  function doInit(extra) {
-    // extra = any migrated values to merge in before loading
-    var keys = ["mediatracker_exclude", "mediatracker_folders", "mediatracker_filter"];
-    browser.storage.local.get(keys, function (data) {
-      // Apply migrations (only if key not already in extension storage)
-      var toWrite = {};
-      if (extra["mediatracker_exclude"] !== undefined && data["mediatracker_exclude"] === undefined)
-        toWrite["mediatracker_exclude"] = extra["mediatracker_exclude"];
-      if (extra["mediatracker_folders"] !== undefined && data["mediatracker_folders"] === undefined)
-        toWrite["mediatracker_folders"] = extra["mediatracker_folders"];
-      if (extra["mediatracker_filter"]  !== undefined && data["mediatracker_filter"]  === undefined)
-        toWrite["mediatracker_filter"]  = extra["mediatracker_filter"];
+    try { knownFolders = JSON.parse(d["mediatracker_folders"] || "[]"); } catch(e) { knownFolders = []; }
 
-      function afterMigration() {
-        browser.storage.local.get(keys, function (d) {
-          // Load exclusions
-          var rawExclude = d["mediatracker_exclude"] || "";
-          excludePatterns = rawExclude.split(";").map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+    var savedFilter = d["mediatracker_filter"] || "all";
+    if ($("filterSelect").querySelector('option[value="' + savedFilter + '"]')) {
+      $("filterSelect").value = savedFilter;
+    }
 
-          // Load folders
-          try { knownFolders = JSON.parse(d["mediatracker_folders"] || "[]"); } catch(e) { knownFolders = []; }
+    sendExcludesToBackground();
+    browser.runtime.sendMessage({ action: "set-filter", filter: $("filterSelect").value }).catch(function () {});
 
-          // Load filter
-          var savedFilter = d["mediatracker_filter"] || "all";
-          if ($("filterSelect").querySelector('option[value="' + savedFilter + '"]')) {
-            $("filterSelect").value = savedFilter;
-          }
+    renderFolderDropdown();
+    loadGroups();
+    refreshLog();
+    setInterval(refreshLog, 2000);
 
-          // Push prefs to background
-          sendExcludesToBackground();
-          browser.runtime.sendMessage({ action: "set-filter", filter: $("filterSelect").value }).catch(function () {});
-
-          // Render
-          renderFolderDropdown();
-          loadGroups();
-          refreshLog();
-          setInterval(refreshLog, 2000);
-
-          hideLoading();
-        });
-      }
-
-      if (Object.keys(toWrite).length) {
-        browser.storage.local.set(toWrite, afterMigration);
-      } else {
-        afterMigration();
-      }
-    });
-  }
-
-  doInit(migrations);
+    hideLoading();
+  });
 }
 
 /* ═══════════════════════════ Known Folders ═══════════════════ */
@@ -197,21 +159,38 @@ function renderRequestList() {
   var container = $("requestList");
   container.innerHTML = "";
 
-  // Store for arrow-key navigation (newest first order matches DOM order)
-  visibleList = [];
+  // Build origin→color-index map in newest-first display order
+  var originColorMap = {};
+  var nextColorIdx = 0;
+  var displayList = [];
   var start = Math.max(0, list.length - 500);
   for (var i = list.length - 1; i >= start; i--) {
-    visibleList.push(list[i]);
+    displayList.push(list[i]);
   }
+  displayList.forEach(function (r) {
+    var origin = resolveOrigin(r);
+    if (origin && !(origin in originColorMap)) {
+      originColorMap[origin] = nextColorIdx % 10;
+      nextColorIdx++;
+    }
+  });
+
+  // Store for arrow-key navigation (newest first order matches DOM order)
+  visibleList = displayList;
 
   for (var vi = 0; vi < visibleList.length; vi++) {
-    container.appendChild(buildRequestRow(visibleList[vi], vi));
+    var r = visibleList[vi];
+    var colorIdx = -1;
+    var origin = resolveOrigin(r);
+    if (origin && origin in originColorMap) colorIdx = originColorMap[origin];
+    container.appendChild(buildRequestRow(r, vi, colorIdx));
   }
 }
 
-function buildRequestRow(r, vi) {
+function buildRequestRow(r, vi, colorIdx) {
   var row = document.createElement("div");
   row.className = "request-row" + (selectedRequest === r ? " selected" : "");
+  if (colorIdx >= 0) row.classList.add("src-" + colorIdx);
   row.dataset.vi = vi;
 
   var badge = document.createElement("span");
@@ -567,6 +546,81 @@ $("detailCloseBtn").addEventListener("click", function () {
   renderDetail();
 });
 
+/* ═══════════════════════════ Quick Exclude ══════════════════ */
+(function () {
+  var qeSelectedIndex = -1;
+  var qeChars = [];
+
+  function qeTail(url) {
+    try {
+      var path = new URL(url).pathname;
+      var tail = path.split("/").filter(Boolean).pop() || new URL(url).hostname;
+      return tail.length > 32 ? tail.slice(tail.length - 32) : tail;
+    } catch (e) {
+      var idx = url.lastIndexOf("/");
+      var s = idx >= 0 ? url.slice(idx + 1) : url;
+      return s.length > 32 ? s.slice(s.length - 32) : s;
+    }
+  }
+
+  function openQuickExclude() {
+    if (!selectedRequest) return;
+    qeChars = qeTail(selectedRequest.url).split("");
+    qeSelectedIndex = -1;
+
+    var container = $("qeChars");
+    container.innerHTML = "";
+    qeChars.forEach(function (ch, i) {
+      var span = document.createElement("span");
+      span.className = "qe-char";
+      span.textContent = ch;
+      span.addEventListener("click", function () {
+        qeSelectedIndex = i;
+        renderQeSelection();
+      });
+      container.appendChild(span);
+    });
+
+    $("qePreview").textContent = "—";
+    $("qeSaveBtn").disabled = true;
+    $("quickExcludeBackdrop").classList.add("open");
+  }
+
+  function renderQeSelection() {
+    var spans = $("qeChars").querySelectorAll(".qe-char");
+    spans.forEach(function (s, i) {
+      s.classList.toggle("selected", i >= qeSelectedIndex);
+    });
+    if (qeSelectedIndex >= 0) {
+      $("qePreview").textContent = qeChars.slice(qeSelectedIndex).join("");
+      $("qeSaveBtn").disabled = false;
+    }
+  }
+
+  function closeQuickExclude() {
+    $("quickExcludeBackdrop").classList.remove("open");
+  }
+
+  $("quickExcludeBtn").addEventListener("click", openQuickExclude);
+
+  $("qeCancelBtn").addEventListener("click", closeQuickExclude);
+
+  $("quickExcludeBackdrop").addEventListener("click", function (e) {
+    if (e.target === this) closeQuickExclude();
+  });
+
+  $("qeSaveBtn").addEventListener("click", function () {
+    if (qeSelectedIndex < 0) return;
+    var pattern = qeChars.slice(qeSelectedIndex).join("");
+    browser.storage.local.get(["mediatracker_exclude"], function (d) {
+      var existing = (d["mediatracker_exclude"] || "").trim();
+      var raw = existing ? existing + ";" + pattern : pattern;
+      savePrefs(raw);
+      closeQuickExclude();
+    });
+  });
+})();
+
 
 function assignSelected(groupName) {
   if (!selectedRequest) return;
@@ -622,6 +676,7 @@ $("prefsBtn").addEventListener("click", function () {
   renderPrefsFolderList();
   $("prefsFolderPaste").value = "";
   $("prefsFolderError").style.display = "none";
+  updateStorageUsage();
   $("prefsBackdrop").classList.add("open");
 });
 
@@ -632,6 +687,23 @@ $("prefsExclude").addEventListener("input", function () {
 function updatePrefsCount(raw) {
   var count = raw.split(";").map(function (s) { return s.trim(); }).filter(Boolean).length;
   $("prefsCount").textContent = count ? count + " exclusion" + (count === 1 ? "" : "s") + " active" : "No exclusions set";
+}
+
+function updateStorageUsage() {
+  var QUOTA = 10 * 1024 * 1024; // 10 MB default for storage.local without unlimitedStorage
+  $("prefsStorageText").textContent = "Calculating…";
+  $("prefsStorageBar").style.width = "0%";
+  $("prefsStorageBar").style.background = "#448";
+  browser.storage.local.getBytesInUse(null).then(function (bytes) {
+    var pct = Math.min(100, (bytes / QUOTA) * 100);
+    var usedKb = (bytes / 1024).toFixed(1);
+    var totalKb = (QUOTA / 1024).toFixed(0);
+    $("prefsStorageText").textContent = usedKb + " KB used of " + totalKb + " KB (" + pct.toFixed(1) + "%)";
+    $("prefsStorageBar").style.width = pct + "%";
+    $("prefsStorageBar").style.background = pct >= 90 ? "#c33" : pct >= 70 ? "#e07b00" : "#448";
+  }).catch(function () {
+    $("prefsStorageText").textContent = "Storage usage unavailable.";
+  });
 }
 
 $("prefsCancelBtn").addEventListener("click", function () {
@@ -674,14 +746,15 @@ function buildPrefsSnapshot() {
 $("prefsExportJsonBtn").addEventListener("click", function () {
   var snap = buildPrefsSnapshot();
   var json = JSON.stringify(snap, null, 2);
-  navigator.clipboard.writeText(json).then(function () {
-    var btn = $("prefsExportJsonBtn");
-    var prev = btn.textContent;
-    btn.textContent = "Copied!";
-    setTimeout(function () { btn.textContent = prev; }, 1500);
-  }).catch(function () {
-    alert("Clipboard write failed.\n\n" + json);
-  });
+  var blob = new Blob([json], { type: "application/json" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "mediatracker-" + new Date().toISOString().slice(0, 10) + ".json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 });
 
 $("prefsExportMdBtn").addEventListener("click", function () {
@@ -751,24 +824,28 @@ $("prefsExportMdBtn").addEventListener("click", function () {
 });
 
 $("prefsImportJsonBtn").addEventListener("click", function () {
-  var area = $("prefsImportArea");
-  var isOpen = area.style.display !== "none";
-  area.style.display = isOpen ? "none" : "";
-  if (!isOpen) {
-    $("prefsImportInput").value = "";
-    $("prefsImportError").style.display = "none";
-    $("prefsImportInput").focus();
-  }
+  $("prefsImportError").style.display = "none";
+  $("prefsImportFile").value = "";
+  $("prefsImportFile").click();
 });
 
-$("prefsImportCancelBtn").addEventListener("click", function () {
-  $("prefsImportArea").style.display = "none";
+$("prefsImportFile").addEventListener("change", function () {
+  var file = this.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function (e) { runImport(e.target.result); };
+  reader.onerror = function () {
+    var errEl = $("prefsImportError");
+    errEl.textContent = "Could not read file.";
+    errEl.style.display = "";
+  };
+  reader.readAsText(file);
 });
 
-$("prefsImportConfirmBtn").addEventListener("click", function () {
+function runImport(raw) {
   var errEl = $("prefsImportError");
   errEl.style.display = "none";
-  var raw = $("prefsImportInput").value.trim();
+  raw = (raw || "").trim();
   if (!raw) return;
 
   var snap;
@@ -843,7 +920,6 @@ $("prefsImportConfirmBtn").addEventListener("click", function () {
                   loadGroups();
                   summary.push(created + " group(s)");
                   alert("Imported: " + summary.join(", ") + ".");
-                  $("prefsImportArea").style.display = "none";
                 }
               }
             );
@@ -853,7 +929,6 @@ $("prefsImportConfirmBtn").addEventListener("click", function () {
           loadGroups();
           summary.push(created + " group(s)");
           alert("Imported: " + summary.join(", ") + ".");
-          $("prefsImportArea").style.display = "none";
         }
         return;
       }
@@ -866,9 +941,8 @@ $("prefsImportConfirmBtn").addEventListener("click", function () {
     importNext(0);
   } else {
     alert("Imported: " + (summary.join(", ") || "nothing") + ".");
-    $("prefsImportArea").style.display = "none";
   }
-});
+}
 
 /* ── Folder import inside Preferences ── */
 
@@ -949,6 +1023,23 @@ function renderPrefsFolderList() {
     list.appendChild(row);
   });
 }
+
+$("prefsCleanFoldersBtn").addEventListener("click", function () {
+  var usedIds = {};
+  groupOrder.forEach(function (key) {
+    var fid = (groups[key] || {}).folderId;
+    if (fid) usedIds[fid] = true;
+  });
+  var unused = knownFolders.filter(function (f) { return !usedIds[f.id]; });
+  if (!unused.length) { alert("All folders have groups — nothing to remove."); return; }
+  if (!confirm("Remove " + unused.length + " folder" + (unused.length === 1 ? "" : "s") + " with no groups?")) return;
+  var removeIds = {};
+  unused.forEach(function (f) { removeIds[f.id] = true; });
+  knownFolders = knownFolders.filter(function (f) { return !removeIds[f.id]; });
+  saveKnownFolders();
+  renderFolderDropdown();
+  renderPrefsFolderList();
+});
 
 $("prefsFolderImportBtn").addEventListener("click", function () {
   var errEl = $("prefsFolderError");
@@ -1142,14 +1233,16 @@ function doExportMd() {
   });
 
   var md = lines.join("\n");
-  navigator.clipboard.writeText(md).then(function () {
-    var btn = $("exportAllBtn");
-    var prev = btn.textContent;
-    btn.textContent = "Copied MD!";
-    setTimeout(function () { btn.textContent = prev; }, 1500);
-  }).catch(function () {
-    alert("Clipboard write failed.\n\n" + md);
-  });
+  var ts = new Date().toISOString().slice(0, 16).replace("T", "_").replace(":", "-");
+  var blob = new Blob([md], { type: "text/markdown" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "mediatracker-" + ts + ".md";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // Main Export button = JSON (default action)
@@ -1289,6 +1382,12 @@ $("genConfirmBtn").addEventListener("click", function () {
     if (i >= names.length) {
       $("generateBackdrop").classList.remove("open");
       loadGroups();
+      if (defaultFolderId) {
+        requestAnimationFrame(function () {
+          var hdr = document.getElementById(defaultFolderId);
+          if (hdr) hdr.scrollIntoView({ block: "start" });
+        });
+      }
       return;
     }
     browser.runtime.sendMessage(

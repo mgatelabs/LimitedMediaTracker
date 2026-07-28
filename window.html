@@ -236,9 +236,20 @@
       align-items: flex-start;
       gap: 6px;
       font-size: 11px;
+      border-left: 3px solid transparent;
     }
     .request-row:hover { background: #f0f4ff; }
     .request-row.selected { background: #dce8ff; }
+    .src-0 { border-left-color: #6ea8fe; }
+    .src-1 { border-left-color: #79dfc1; }
+    .src-2 { border-left-color: #f0a875; }
+    .src-3 { border-left-color: #c29ffa; }
+    .src-4 { border-left-color: #f786a4; }
+    .src-5 { border-left-color: #f7d56e; }
+    .src-6 { border-left-color: #86c8f7; }
+    .src-7 { border-left-color: #a3cfbb; }
+    .src-8 { border-left-color: #e8a87c; }
+    .src-9 { border-left-color: #b5a0e8; }
 
     .request-row-main {
       display: flex;
@@ -565,6 +576,44 @@
     .dialog-actions button.primary { background: #448; border-color: #448; color: #fff; }
     .dialog-actions button.primary:hover { background: #336; }
 
+    /* ── Quick Exclude dialog ── */
+    .qe-chars {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      margin: 12px 0 8px;
+    }
+    .qe-char {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 22px;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 11px;
+      cursor: pointer;
+      background: #fff;
+      user-select: none;
+    }
+    .qe-char.selected {
+      background: #d0e8ff;
+      border-color: #4a90d9;
+    }
+    .qe-preview {
+      font-family: monospace;
+      font-size: 11px;
+      padding: 5px 8px;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      min-height: 24px;
+      word-break: break-all;
+      color: #333;
+      margin-bottom: 12px;
+    }
+
     /* ── Preferences — folder list ── */
     .pref-section-title {
       font-size: 11px;
@@ -727,6 +776,7 @@
       <div class="detail-pane" id="detailPane">
         <div class="detail-header">
           <span id="detailTitle">Request Detail</span>
+          <button id="quickExcludeBtn" title="Quick Exclude" style="font-size:11px;">&#8856; Exclude</button>
           <button id="detailCloseBtn" title="Close">×</button>
         </div>
         <div class="detail-body" id="detailBody"></div>
@@ -832,7 +882,10 @@
       <div style="font-size:10px;color:#aaa;margin-top:4px;" id="prefsCount"></div>
 
       <!-- Known Folders -->
-      <div class="pref-section-title">Known Folders</div>
+      <div class="pref-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Known Folders</span>
+        <button id="prefsCleanFoldersBtn" style="font-size:10px;padding:2px 8px;">Clean Up</button>
+      </div>
       <div style="font-size:11px;color:#666;margin-bottom:6px;">
         Paste a base64 string copied from the Media Browser (⋮ → Copy Tracker Import).
       </div>
@@ -854,19 +907,34 @@
         <button id="prefsExportJsonBtn">Export JSON</button>
         <button id="prefsExportMdBtn">Export MD</button>
         <button id="prefsImportJsonBtn">Import JSON…</button>
+        <input type="file" id="prefsImportFile" accept=".json,application/json" style="display:none;">
       </div>
-      <div id="prefsImportArea" style="display:none;">
-        <textarea id="prefsImportInput" rows="4" style="width:100%;padding:6px 8px;border:1px solid #bbb;border-radius:3px;font-size:11px;font-family:'Consolas',monospace;resize:vertical;" placeholder="Paste exported JSON here…"></textarea>
-        <div id="prefsImportError" style="font-size:10px;color:#c33;margin-top:4px;display:none;"></div>
-        <div style="display:flex;gap:6px;margin-top:6px;">
-          <button id="prefsImportCancelBtn">Cancel</button>
-          <button class="primary" id="prefsImportConfirmBtn">Import</button>
-        </div>
+      <div id="prefsImportError" style="font-size:10px;color:#c33;margin-top:4px;display:none;"></div>
+
+      <!-- Storage usage -->
+      <div class="pref-section-title">Storage</div>
+      <div style="font-size:11px;color:#666;margin-bottom:6px;" id="prefsStorageText">Calculating…</div>
+      <div style="height:8px;background:#e9ecef;border-radius:4px;overflow:hidden;margin-bottom:4px;">
+        <div id="prefsStorageBar" style="height:100%;width:0%;background:#448;border-radius:4px;transition:width 0.3s;"></div>
       </div>
 
       <div class="dialog-actions" style="margin-top:14px;">
         <button id="prefsCancelBtn">Cancel</button>
         <button class="primary" id="prefsSaveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Exclude dialog -->
+  <div class="dialog-backdrop" id="quickExcludeBackdrop">
+    <div class="dialog" style="min-width:380px;max-width:520px;">
+      <h3>Quick Exclude</h3>
+      <p style="font-size:11px;color:#666;margin:-8px 0 10px;">Click the first character of the suffix to exclude.</p>
+      <div class="qe-chars" id="qeChars"></div>
+      <div class="qe-preview" id="qePreview">—</div>
+      <div class="dialog-actions">
+        <button id="qeCancelBtn">Cancel</button>
+        <button class="primary" id="qeSaveBtn" disabled>Save</button>
       </div>
     </div>
   </div>
