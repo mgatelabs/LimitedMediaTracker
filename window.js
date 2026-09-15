@@ -7,6 +7,9 @@ var selectedRequest = null;
 var visibleList     = [];   // current filtered list, kept in sync for arrow navigation
 var knownFolders    = [];   // array of {id,name,preview,...}
 var defaultFolderId = "";   // "" = No Selection
+var showFilledOnly  = false;
+var touchedGroups   = new Set();
+var showTouchedOnly = false;
 
 function $(id) { return document.getElementById(id); }
 
@@ -39,6 +42,8 @@ function initApp() {
     setInterval(refreshLog, 2000);
 
     hideLoading();
+
+    browser.runtime.connect({ name: "tracker-window" });
   });
 }
 
@@ -117,6 +122,18 @@ function refreshLog() {
     updateSummary();
   });
 }
+
+$("filledOnlyBtn").addEventListener("click", function () {
+  showFilledOnly = !showFilledOnly;
+  this.classList.toggle("active", showFilledOnly);
+  renderGroups();
+});
+
+$("touchedOnlyBtn").addEventListener("click", function () {
+  showTouchedOnly = !showTouchedOnly;
+  this.classList.toggle("active", showTouchedOnly);
+  renderGroups();
+});
 
 function loadGroups() {
   browser.runtime.sendMessage({ action: "groups-get" }, function (res) {
@@ -280,6 +297,8 @@ function renderGroups() {
 
   for (var gi = 0; gi < groupOrder.length; gi++) {
     var name = groupOrder[gi];
+    if (showFilledOnly && !((groups[name] || {}).requests || []).length) continue;
+    if (showTouchedOnly && !touchedGroups.has(name)) continue;
     var fid  = (groups[name] || {}).folderId || "";
     if (!buckets[fid]) { buckets[fid] = []; bucketKeys.push(fid); }
     buckets[fid].push(name);
@@ -344,7 +363,8 @@ function buildGroupCard(name, grp) {
 
   var nameEl = document.createElement("span");
   nameEl.className = "group-card-name";
-  nameEl.textContent = (grp.displayName || name) + (grp.type === "file" ? " – File" : " – M3U8 & VTT");
+  var typeLabel = { m3u8_vtt: "M3U8 & VTT", file: "File", mp4: "MP4", mp3: "MP3", vtt: "VTT" };
+  nameEl.textContent = (grp.displayName || name) + " – " + (typeLabel[grp.type] || "M3U8 & VTT");
   nameEl.title = grp.displayName || name;
 
   var countEl = document.createElement("span");
@@ -362,6 +382,7 @@ function buildGroupCard(name, grp) {
       if (!cnt) return;
       if (!confirm("Clear " + cnt + " item" + (cnt === 1 ? "" : "s") + " from \"" + (grp.displayName || n) + "\"? The group will remain.")) return;
       browser.runtime.sendMessage({ action: "group-clear-items", name: n }, function () {
+        touchedGroups.add(n);
         loadGroups();
       });
     });
@@ -421,7 +442,10 @@ function buildGroupCard(name, grp) {
               }
             }, function () {
               done++;
-              if (done === toAssign.length) loadGroups();
+              if (done === toAssign.length) {
+                touchedGroups.add(n);
+                loadGroups();
+              }
             });
           });
         }); // end group-clear-items callback
@@ -435,6 +459,7 @@ function buildGroupCard(name, grp) {
   closeBtn.title = "Delete group";
   closeBtn.addEventListener("click", function () {
     browser.runtime.sendMessage({ action: "group-delete", name: name }, function () {
+      touchedGroups.delete(name);
       loadGroups();
     });
   });
@@ -466,6 +491,25 @@ function buildGroupCard(name, grp) {
     vttBtn.addEventListener("click",  function () { assignSelected(name); });
     body.appendChild(m3u8Btn);
     body.appendChild(vttBtn);
+  } else if (type === "mp4") {
+    var mp4Btn = makeTypeButton("MP4", requests, function (r) {
+      return /\.mp4/i.test(r.url || "");
+    });
+    mp4Btn.addEventListener("click", function () { assignSelected(name); });
+    body.appendChild(mp4Btn);
+  } else if (type === "mp3") {
+    var mp3Btn = makeTypeButton("MP3", requests, function (r) {
+      return /\.mp3/i.test(r.url || "");
+    });
+    mp3Btn.addEventListener("click", function () { assignSelected(name); });
+    body.appendChild(mp3Btn);
+  } else if (type === "vtt") {
+    var vttOnlyBtn = makeTypeButton("VTT", requests, function (r) {
+      return r.category === "SUBTITLE" || r.mediaType === "SUBTITLE" ||
+             /\.vtt/i.test(r.url || "");
+    });
+    vttOnlyBtn.addEventListener("click", function () { assignSelected(name); });
+    body.appendChild(vttOnlyBtn);
   } else {
     var fileBtn = makeTypeButtonAll("FILE", requests);
     fileBtn.addEventListener("click", function () { assignSelected(name); });
@@ -642,6 +686,7 @@ function assignSelected(groupName) {
       originHeader: r.originHeader  || "",
     }
   }, function () {
+    touchedGroups.add(groupName);
     selectedRequest = null;
     loadGroups();
   });
@@ -1101,8 +1146,15 @@ $("addGroupBtn").addEventListener("click", function () {
   if (name.includes("~")) { alert("Group name cannot contain '~'."); return; }
   browser.runtime.sendMessage({ action: "group-create", name: name, type: type, folderId: defaultFolderId }, function (res) {
     if (res && res.created) {
+      touchedGroups.add(res.created);
       $("newGroupInput").value = "";
       loadGroups();
+      if (defaultFolderId) {
+        requestAnimationFrame(function () {
+          var hdr = document.getElementById(defaultFolderId);
+          if (hdr) hdr.scrollIntoView({ block: "start" });
+        });
+      }
     }
   });
 });
@@ -1392,7 +1444,7 @@ $("genConfirmBtn").addEventListener("click", function () {
     }
     browser.runtime.sendMessage(
       { action: "group-create", name: names[i], type: type, folderId: defaultFolderId },
-      function () { sendNext(i + 1); }
+      function (res) { if (res && res.created) touchedGroups.add(res.created); sendNext(i + 1); }
     );
   }
   sendNext(0);

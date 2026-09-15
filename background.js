@@ -4,7 +4,7 @@ let requestMap = {};   // id -> entry, for fast header lookups
 let urlSet     = {};   // url -> log entry, for dedup + hit counting
 let groups = {};
 let groupOrder = [];
-let isPaused = false;
+let isPaused = true;
 let excludePatterns = [];
 let activeFilter = 'all';  // mirrors the window's filter dropdown
 
@@ -38,8 +38,8 @@ async function saveState() {
 
 async function loadState() {
   const data = await chrome.storage.local.get(['groups', 'groupOrder']);
-  if (data.groups) groups = data.groups;
-  if (data.groupOrder) groupOrder = data.groupOrder;
+  if (data.groups && Object.keys(data.groups).length > 0) groups = data.groups;
+  if (data.groupOrder && data.groupOrder.length > 0) groupOrder = data.groupOrder;
 }
 
 // =================== Group management ===================
@@ -82,7 +82,7 @@ function deleteGroup(name) {
 
 function updateGroupType(name, newType) {
   if (!groups[name]) return false;
-  const validTypes = ['m3u8_vtt', 'file'];
+  const validTypes = ['m3u8_vtt', 'file', 'mp4', 'mp3', 'vtt'];
   if (!validTypes.includes(newType)) return false;
   groups[name].type = newType;
   saveState();
@@ -577,6 +577,22 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     const found = requestLog.filter(r => r.mediaType && !r._groupAssigned).slice(-50);
     sendResponse({ items: found, count: found.length });
   }
+});
+
+// =================== Window lifecycle (port-based pause) ===================
+
+let trackerWindowCount = 0;
+
+chrome.runtime.onConnect.addListener(function (port) {
+  if (port.name !== 'tracker-window') return;
+  trackerWindowCount++;
+  isPaused = false;
+  port.onDisconnect.addListener(function () {
+    trackerWindowCount = Math.max(0, trackerWindowCount - 1);
+    if (trackerWindowCount === 0) {
+      isPaused = true;
+    }
+  });
 });
 
 // Load existing state on startup

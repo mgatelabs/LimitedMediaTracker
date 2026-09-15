@@ -48,6 +48,8 @@
     .panel-toolbar button.primary:hover { background: #336; }
     .panel-toolbar button.accent       { border-color: #484; background: #484; color: #fff; }
     .panel-toolbar button.accent:hover { background: #363; }
+    .panel-toolbar button.active       { border-color: #448; background: #448; color: #fff; }
+    .panel-toolbar button.active:hover { background: #336; }
 
     .panel-toolbar input[type="text"] {
       padding: 4px 8px;
@@ -791,6 +793,9 @@
         <select id="newGroupType">
           <option value="m3u8_vtt">M3U8 &amp; VTT</option>
           <option value="file">File</option>
+          <option value="mp4">MP4</option>
+          <option value="mp3">MP3</option>
+          <option value="vtt">VTT</option>
         </select>
         <button id="addGroupBtn">+</button>
         <button class="accent" id="generateBtn">Generate</button>
@@ -800,6 +805,8 @@
         <select id="defaultFolderSelect" style="flex:1;min-width:60px;">
           <option value="">No Folder</option>
         </select>
+        <button id="filledOnlyBtn" title="Show only groups with items" style="font-size:11px;">Filled</button>
+        <button id="touchedOnlyBtn" title="Show only groups touched this session" style="font-size:11px;">Recent</button>
 
         <!-- Export split-button -->
         <div class="split-btn primary">
@@ -854,6 +861,9 @@
         <select id="genType">
           <option value="m3u8_vtt">M3U8 &amp; VTT</option>
           <option value="file">File</option>
+          <option value="mp4">MP4</option>
+          <option value="mp3">MP3</option>
+          <option value="vtt">VTT</option>
         </select>
       </div>
       <div class="dialog-row">
