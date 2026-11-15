@@ -85,6 +85,12 @@ $("defaultFolderSelect").addEventListener("change", function () {
   }
 });
 
+$("scrollToFolderBtn").addEventListener("click", function () {
+  if (!defaultFolderId) return;
+  var hdr = document.getElementById(defaultFolderId);
+  if (hdr) hdr.scrollIntoView({ block: "start" });
+});
+
 /* ═══════════════════════════ Arrow key navigation ═══════════ */
 document.addEventListener("keydown", function (e) {
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
@@ -363,7 +369,7 @@ function buildGroupCard(name, grp) {
 
   var nameEl = document.createElement("span");
   nameEl.className = "group-card-name";
-  var typeLabel = { m3u8_vtt: "M3U8 & VTT", file: "File", mp4: "MP4", mp3: "MP3", vtt: "VTT" };
+  var typeLabel = { m3u8_vtt: "M3U8 & VTT", m3u8_audio: "M3U8 & Audio", file: "File", mp4: "MP4", mp3: "MP3", vtt: "VTT" };
   nameEl.textContent = (grp.displayName || name) + " – " + (typeLabel[grp.type] || "M3U8 & VTT");
   nameEl.title = grp.displayName || name;
 
@@ -464,9 +470,23 @@ function buildGroupCard(name, grp) {
     });
   });
 
+  var sortBtn = document.createElement("button");
+  sortBtn.className = "group-card-sort";
+  sortBtn.textContent = "⇅";
+  sortBtn.title = "Sort items by timestamp";
+  (function (n) {
+    sortBtn.addEventListener("click", function () {
+      browser.runtime.sendMessage({ action: "group-sort-items", name: n }, function () {
+        touchedGroups.add(n);
+        loadGroups();
+      });
+    });
+  })(name);
+
   hdr.appendChild(nameEl);
   hdr.appendChild(countEl);
   if (autoBtn) hdr.appendChild(autoBtn);
+  hdr.appendChild(sortBtn);
   hdr.appendChild(cleanBtn);
   hdr.appendChild(closeBtn);
   card.appendChild(hdr);
@@ -491,6 +511,13 @@ function buildGroupCard(name, grp) {
     vttBtn.addEventListener("click",  function () { assignSelected(name); });
     body.appendChild(m3u8Btn);
     body.appendChild(vttBtn);
+  } else if (type === "m3u8_audio") {
+    var m3u8ABtn = makeTypeButton("M3U8", requests, function (r) {
+      return r.category === "STREAM" || r.mediaType === "STREAM" ||
+             /\.m3u8|\.mpd|master/i.test(r.url || "");
+    });
+    m3u8ABtn.addEventListener("click", function () { assignSelected(name); });
+    body.appendChild(m3u8ABtn);
   } else if (type === "mp4") {
     var mp4Btn = makeTypeButton("MP4", requests, function (r) {
       return /\.mp4/i.test(r.url || "");
@@ -1370,8 +1397,8 @@ function openGenerateDialog() {
     ot.value = e; ot.textContent = pad2(e);
     epToSel.appendChild(ot);
   }
-  // Default "to" to episode 13
-  epToSel.value = 13;
+  // Default "to" to episode 12
+  epToSel.value = 12;
 
   updateGenPreview();
   $("generateBackdrop").classList.add("open");
@@ -1381,20 +1408,27 @@ function updateGenPreview() {
   var s    = parseInt($("genSeason").value, 10);
   var from = parseInt($("genEpFrom").value, 10);
   var to   = parseInt($("genEpTo").value, 10);
+  var type = $("genType").value;
   var ext  = $("genExtension").value.trim();
   if (to < from) to = from;
 
   var names = [];
   for (var e = from; e <= Math.min(to, from + 4); e++) {
-    names.push("S" + pad2(s) + "E" + pad2(e) + ext);
+    var base = "S" + pad2(s) + "E" + pad2(e) + ext;
+    if (type === "m3u8_audio_vtt") {
+      names.push(base + "  " + base + "~Audio");
+    } else {
+      names.push(base);
+    }
   }
   var total = Math.max(0, to - from + 1);
+  var groupCount = type === "m3u8_audio_vtt" ? total * 2 : total;
   var preview = names.join("  ");
-  if (total > 5) preview += "  … (" + total + " groups total)";
+  if (total > 5) preview += "  … (" + groupCount + " groups total)";
   $("genPreview").textContent = preview || "—";
 }
 
-["genSeason", "genEpFrom", "genEpTo"].forEach(function (id) {
+["genSeason", "genEpFrom", "genEpTo", "genType"].forEach(function (id) {
   $(id).addEventListener("change", function () {
     var from = parseInt($("genEpFrom").value, 10);
     var to   = parseInt($("genEpTo").value, 10);
@@ -1424,14 +1458,21 @@ $("genConfirmBtn").addEventListener("click", function () {
   if (to < from) to = from;
   if (ext.includes("~")) { alert("Extension cannot contain '~'."); return; }
 
-  var names = [];
+  // Build list of {name, type} pairs
+  var entries = [];
   for (var e = from; e <= to; e++) {
-    names.push("S" + pad2(s) + "E" + pad2(e) + ext);
+    var base = "S" + pad2(s) + "E" + pad2(e) + ext;
+    if (type === "m3u8_audio_vtt") {
+      entries.push({ name: base,           type: "m3u8_vtt" });
+      entries.push({ name: base + "~Audio", type: "m3u8_audio" });
+    } else {
+      entries.push({ name: base, type: type });
+    }
   }
 
   // Send sequentially so each createGroup sees the updated groupOrder
   function sendNext(i) {
-    if (i >= names.length) {
+    if (i >= entries.length) {
       $("generateBackdrop").classList.remove("open");
       loadGroups();
       if (defaultFolderId) {
@@ -1443,7 +1484,7 @@ $("genConfirmBtn").addEventListener("click", function () {
       return;
     }
     browser.runtime.sendMessage(
-      { action: "group-create", name: names[i], type: type, folderId: defaultFolderId },
+      { action: "group-create", name: entries[i].name, type: entries[i].type, folderId: defaultFolderId },
       function (res) { if (res && res.created) touchedGroups.add(res.created); sendNext(i + 1); }
     );
   }

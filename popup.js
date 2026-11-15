@@ -16,7 +16,7 @@ updateSummary(null)
 syncLeftMediaSection()
 
 /* ================================================= Helpers =============================================== */
-function getTypeBadge(t) { return t === "file" ? "FILE" : "M3U8" }
+function getTypeBadge(t) { return t === "file" ? "FILE" : t === "m3u8_audio" ? "M3U8~A" : "M3U8" }
 function trunc(s, n)    { return (s && s.length > n) ? s.slice(0, n) + "..." : (s || "-") }
 function escAttr(s)     { return s ? s.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : "" }
 

@@ -459,6 +459,17 @@
     }
     .group-card-auto:hover { background: #dce8ff; border-color: #448; }
 
+    .group-card-sort {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #999;
+      font-size: 13px;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    .group-card-sort:hover { color: #4a8; }
+
     .group-card-body {
       padding: 6px 8px;
       display: flex;
@@ -792,6 +803,7 @@
         <input type="text" id="newGroupInput" placeholder="Group name…" style="flex:1;min-width:60px;">
         <select id="newGroupType">
           <option value="m3u8_vtt">M3U8 &amp; VTT</option>
+          <option value="m3u8_audio">M3U8 &amp; Audio</option>
           <option value="file">File</option>
           <option value="mp4">MP4</option>
           <option value="mp3">MP3</option>
@@ -805,16 +817,17 @@
         <select id="defaultFolderSelect" style="flex:1;min-width:60px;">
           <option value="">No Folder</option>
         </select>
+        <button id="scrollToFolderBtn" title="Scroll to selected folder" style="font-size:11px;padding:2px 6px;">#</button>
         <button id="filledOnlyBtn" title="Show only groups with items" style="font-size:11px;">Filled</button>
         <button id="touchedOnlyBtn" title="Show only groups touched this session" style="font-size:11px;">Recent</button>
 
         <!-- Export split-button -->
         <div class="split-btn primary">
-          <button id="exportAllBtn">Export</button>
+          <button id="exportAllBtn" title="Copy groups as base64 JSON to clipboard">Export JSON</button>
           <button class="split-arrow" id="exportMenuToggle" title="More export options">▾</button>
           <div class="split-menu" id="exportMenu">
-            <button id="exportJsonBtn">Export JSON</button>
-            <button id="exportMdBtn">Export Markdown</button>
+            <button id="exportJsonBtn">Copy JSON (clipboard)</button>
+            <button id="exportMdBtn">Download Markdown</button>
           </div>
         </div>
 
@@ -860,6 +873,8 @@
         <label>Type</label>
         <select id="genType">
           <option value="m3u8_vtt">M3U8 &amp; VTT</option>
+          <option value="m3u8_audio">M3U8 &amp; Audio</option>
+          <option value="m3u8_audio_vtt">M3U8 + Audio + VTT (paired)</option>
           <option value="file">File</option>
           <option value="mp4">MP4</option>
           <option value="mp3">MP3</option>

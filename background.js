@@ -82,7 +82,7 @@ function deleteGroup(name) {
 
 function updateGroupType(name, newType) {
   if (!groups[name]) return false;
-  const validTypes = ['m3u8_vtt', 'file', 'mp4', 'mp3', 'vtt'];
+  const validTypes = ['m3u8_vtt', 'm3u8_audio', 'file', 'mp4', 'mp3', 'vtt'];
   if (!validTypes.includes(newType)) return false;
   groups[name].type = newType;
   saveState();
@@ -538,7 +538,10 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     isPaused = !isPaused;
     sendResponse({ paused: isPaused });
   } else if (request.action === 'groups-get') {
-    sendResponse({ groups, groupOrder });
+    stateReady.then(function () {
+      sendResponse({ groups, groupOrder });
+    });
+    return true; // keep channel open for async response
   } else if (request.action === 'group-create') {
     const name = createGroup(request.name, request.type, request.folderId || '');
     sendResponse({ created: name || null });
@@ -566,6 +569,14 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   } else if (request.action === 'group-clear-items') {
     if (groups[request.name]) { groups[request.name].requests = []; saveState(); }
     sendResponse({ cleared: true });
+  } else if (request.action === 'group-sort-items') {
+    if (groups[request.name]) {
+      groups[request.name].requests.sort(function (a, b) {
+        return (a.timestamp || 0) < (b.timestamp || 0) ? -1 : 1;
+      });
+      saveState();
+    }
+    sendResponse({ sorted: true });
   } else if (request.action === 'export-group') {
     const json = exportGroupJson(request.groupName);
     sendResponse({ json });
@@ -595,8 +606,8 @@ chrome.runtime.onConnect.addListener(function (port) {
   });
 });
 
-// Load existing state on startup
-loadState();
+// Load existing state on startup — keep a promise so message handlers can wait for it
+const stateReady = loadState();
 
 // =================== Context menus ===================
 

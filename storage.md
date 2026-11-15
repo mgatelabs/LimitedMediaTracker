@@ -25,7 +25,7 @@ Groups and their request lists are persisted by the background service worker af
 ```js
 {
   displayName: "S01E01",          // human-readable name (may differ from storage key)
-  type:        "m3u8_vtt",        // "m3u8_vtt" | "file"
+  type:        "m3u8_vtt",        // see group types below
   folderId:    "f7a3c91d",        // "" = no folder
   created:     "2026-06-29T…",    // ISO-8601 timestamp
   requests: [
@@ -45,6 +45,17 @@ Groups and their request lists are persisted by the background service worker af
   ]
 }
 ```
+
+### Group types
+
+| Value | Meaning |
+|-------|---------|
+| `m3u8_vtt` | HLS stream + subtitle track (default) |
+| `m3u8_audio` | Audio-only HLS stream |
+| `file` | Generic file (any request type) |
+| `mp4` | MP4 video |
+| `mp3` | MP3 audio |
+| `vtt` | Subtitle file |
 
 ### Storage key format
 

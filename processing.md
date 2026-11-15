@@ -96,6 +96,7 @@ The window communicates with the background via `browser.runtime.sendMessage`. A
 | `group-rename` | `{ oldName, newName }` | `{ renamed: bool }` |
 | `group-update-type` | `{ name, type }` | `{ updated: bool }` |
 | `group-clear-items` | `{ name }` | `{ cleared: true }` |
+| `group-sort-items` | `{ name }` | `{ sorted: true }` |
 | `groups-clear-folder` | `{ folderId }` | `{ cleared: true }` |
 | `group-add-item` | `{ groupName, request }` | `{ added: true }` |
 | `search-media` | — | `{ items, count }` |
