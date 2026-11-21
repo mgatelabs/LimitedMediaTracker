@@ -24,7 +24,7 @@ The decoded value is a JSON **array** — one object per filled group, in group-
 [
   { "n": "S01E01", "t": "m3u8_vtt",   "folder_id": "f7a3c91d", "items": [ … ] },
   { "n": "S01E02", "t": "m3u8_vtt",   "folder_id": "f7a3c91d", "items": [ … ] },
-  { "n": "S01E01~Audio", "t": "m3u8_audio", "folder_id": "f7a3c91d", "items": [ … ] }
+  { "n": "S01E01-A", "t": "m3u8_audio", "folder_id": "f7a3c91d", "items": [ … ] }
 ]
 ```
 
@@ -103,7 +103,7 @@ The `origin` field is resolved at export time:
     ]
   },
   {
-    "n": "S01E01~Audio",
+    "n": "S01E01-A",
     "t": "m3u8_audio",
     "folder_id": "f7a3c91d",
     "items": [
@@ -142,7 +142,7 @@ _Folder: My Show (f7a3c91d)_
 | 1 | STREAM | `https://cdn.example.com/hls/master.m3u8` | GET | https://example.com | https://example.com/watch/s01e01 |
 | 2 | SUBTITLE | `https://cdn.example.com/subs/en.vtt` | GET | https://example.com | - |
 
-## S01E01~Audio (m3u8_audio)
+## S01E01-A (m3u8_audio)
 _Folder: My Show (f7a3c91d)_
 
 | # | Type | URL | Method | Origin | Referer |

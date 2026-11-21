@@ -789,6 +789,7 @@
       <div class="detail-pane" id="detailPane">
         <div class="detail-header">
           <span id="detailTitle">Request Detail</span>
+          <button id="removeRequestBtn" class="danger" title="Remove this request from the list" style="font-size:11px;">Remove</button>
           <button id="quickExcludeBtn" title="Quick Exclude" style="font-size:11px;">&#8856; Exclude</button>
           <button id="detailCloseBtn" title="Close">×</button>
         </div>
@@ -803,7 +804,7 @@
         <input type="text" id="newGroupInput" placeholder="Group name…" style="flex:1;min-width:60px;">
         <select id="newGroupType">
           <option value="m3u8_vtt">M3U8 &amp; VTT</option>
-          <option value="m3u8_audio">M3U8 &amp; Audio</option>
+          <option value="m3u8_audio">M3U8 as Audio</option>
           <option value="file">File</option>
           <option value="mp4">MP4</option>
           <option value="mp3">MP3</option>
@@ -873,7 +874,7 @@
         <label>Type</label>
         <select id="genType">
           <option value="m3u8_vtt">M3U8 &amp; VTT</option>
-          <option value="m3u8_audio">M3U8 &amp; Audio</option>
+          <option value="m3u8_audio">M3U8 as Audio</option>
           <option value="m3u8_audio_vtt">M3U8 + Audio + VTT (paired)</option>
           <option value="file">File</option>
           <option value="mp4">MP4</option>

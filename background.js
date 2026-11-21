@@ -534,6 +534,18 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     urlSet = {};
     chrome.storage.local.remove('log');
     sendResponse({ cleared: true });
+  } else if (request.action === 'removeRequest') {
+    const url = request.url;
+    const idx = requestLog.findIndex(function (e) { return e.url === url; });
+    if (idx !== -1) {
+      const removed = requestLog.splice(idx, 1)[0];
+      if (removed) {
+        if (removed.id != null) delete requestMap[removed.id];
+        if (urlSet[removed.url] === removed) delete urlSet[removed.url];
+      }
+    }
+    chrome.storage.local.remove('log');
+    sendResponse({ removed: idx !== -1 });
   } else if (request.action === 'pause') {
     isPaused = !isPaused;
     sendResponse({ paused: isPaused });
@@ -569,13 +581,14 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   } else if (request.action === 'group-clear-items') {
     if (groups[request.name]) { groups[request.name].requests = []; saveState(); }
     sendResponse({ cleared: true });
-  } else if (request.action === 'group-sort-items') {
-    if (groups[request.name]) {
-      groups[request.name].requests.sort(function (a, b) {
-        return (a.timestamp || 0) < (b.timestamp || 0) ? -1 : 1;
-      });
-      saveState();
-    }
+  } else if (request.action === 'sort-groups') {
+    // Re-sort all groups by display name (case-insensitive, stable)
+    groupOrder.sort(function (a, b) {
+      var na = (groups[a] && groups[a].displayName) || a;
+      var nb = (groups[b] && groups[b].displayName) || b;
+      return na.localeCompare(nb, undefined, { sensitivity: 'base' });
+    });
+    saveState();
     sendResponse({ sorted: true });
   } else if (request.action === 'export-group') {
     const json = exportGroupJson(request.groupName);

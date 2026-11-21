@@ -89,6 +89,7 @@ The window communicates with the background via `browser.runtime.sendMessage`. A
 | `set-excludes` | `{ patterns: string[] }` | `{ ok: true }` |
 | `getLog` | — | `{ log, count }` |
 | `clearLog` | — | `{ cleared: true }` |
+| `removeRequest` | `{ url }` | `{ removed: bool }` |
 | `pause` | — | `{ paused: bool }` |
 | `groups-get` | — | `{ groups, groupOrder }` |
 | `group-create` | `{ name, type, folderId }` | `{ created: key \| null }` |
@@ -96,7 +97,7 @@ The window communicates with the background via `browser.runtime.sendMessage`. A
 | `group-rename` | `{ oldName, newName }` | `{ renamed: bool }` |
 | `group-update-type` | `{ name, type }` | `{ updated: bool }` |
 | `group-clear-items` | `{ name }` | `{ cleared: true }` |
-| `group-sort-items` | `{ name }` | `{ sorted: true }` |
+| `sort-groups` | — | `{ sorted: true }` |
 | `groups-clear-folder` | `{ folderId }` | `{ cleared: true }` |
 | `group-add-item` | `{ groupName, request }` | `{ added: true }` |
 | `search-media` | — | `{ items, count }` |

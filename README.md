@@ -32,7 +32,7 @@ This extension is a companion tool for the **Limited Media Server** project — 
 - **Filters** the list by type: M3U8 + VTT, streams, subtitles, video, audio, XHR, and more
 - **Groups** requests by name (e.g. one group per TV episode)
 - **Assigns** a request to a group with a single click
-- **Sorts** items within a group by timestamp with the ⇅ button
+- **Sorts** groups alphabetically with the ⇅ button, keeping your folders tidy as you add more
 - **Exports** groups as compact base64 JSON (clipboard) or Markdown (file download)
 - **Generates** episode groups in bulk (S01E01 → S01E12 in one click), including paired M3U8+VTT and M3U8+Audio+VTT layouts
 - **Organises** groups under folders imported from the companion Media Browser app
@@ -114,14 +114,14 @@ Source code: [github.com/mgatelabs/LimitedMediaTracker](https://github.com/mgate
 └─────────────────────────────┴──────────────────────────────────────┘
 ```
 
-**Left panel** — captured requests, newest first. Click a row to select it and see full details in the pane below. Requests already assigned to a group are hidden from this list automatically.
+**Left panel** — captured requests, newest first. Click a row to select it and see full details in the pane below, where you can **Exclude** it (block matching URLs) or **Remove** it (delete just this one entry). Requests already assigned to a group are hidden from this list automatically.
 
 **Right panel** — your groups. Each card shows the group name, item count, and the following buttons:
 
 | Button | Appears on | Action |
 |--------|-----------|--------|
 | **Auto** | M3U8 & VTT groups only | Auto-assigns the newest unassigned STREAM and SUBTITLE from the list |
-| **⇅** | All groups | Sorts the group's items by timestamp (oldest first) |
+| **⇅** | All groups | Sorts all groups by display name (alphabetical, within each folder) |
 | **⌫** | All groups | Clears all items from the group while keeping the group itself |
 | **×** | All groups | Deletes the group entirely |
 
@@ -136,7 +136,7 @@ Each group has a type that determines how its requests are displayed and categor
 | Type | Display | Purpose |
 |------|---------|---------|
 | `m3u8_vtt` | M3U8 & VTT | HLS stream paired with a subtitle track (the most common type) |
-| `m3u8_audio` | M3U8 & Audio | Audio-only M3U8 stream (no subtitle bucket, no Auto button) |
+| `m3u8_audio` | M3U8 as Audio | Audio-only M3U8 stream (no subtitle bucket, no Auto button) |
 | `file` | File | Generic file — accepts any request, no category filtering |
 | `mp4` | MP4 | MP4 video files |
 | `mp3` | MP3 | MP3 audio files |
@@ -161,8 +161,8 @@ Opens with the **Generate** button. Bulk-creates numbered episode groups for a s
 | Type option | What is created |
 |-------------|----------------|
 | M3U8 & VTT | One `m3u8_vtt` group per episode |
-| M3U8 & Audio | One `m3u8_audio` group per episode |
-| **M3U8 + Audio + VTT (paired)** | Two groups per episode: `S01E01` (`m3u8_vtt`) **and** `S01E01~Audio` (`m3u8_audio`) |
+| M3U8 as Audio | One `m3u8_audio` group per episode |
+| **M3U8 + Audio + VTT (paired)** | Two groups per episode: `S01E01` (`m3u8_vtt`) **and** `S01E01-A` (`m3u8_audio`) |
 
 ---
 

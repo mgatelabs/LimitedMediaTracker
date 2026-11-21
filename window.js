@@ -369,7 +369,7 @@ function buildGroupCard(name, grp) {
 
   var nameEl = document.createElement("span");
   nameEl.className = "group-card-name";
-  var typeLabel = { m3u8_vtt: "M3U8 & VTT", m3u8_audio: "M3U8 & Audio", file: "File", mp4: "MP4", mp3: "MP3", vtt: "VTT" };
+  var typeLabel = { m3u8_vtt: "M3U8 & VTT", m3u8_audio: "M3U8 as Audio", file: "File", mp4: "MP4", mp3: "MP3", vtt: "VTT" };
   nameEl.textContent = (grp.displayName || name) + " – " + (typeLabel[grp.type] || "M3U8 & VTT");
   nameEl.title = grp.displayName || name;
 
@@ -473,15 +473,12 @@ function buildGroupCard(name, grp) {
   var sortBtn = document.createElement("button");
   sortBtn.className = "group-card-sort";
   sortBtn.textContent = "⇅";
-  sortBtn.title = "Sort items by timestamp";
-  (function (n) {
-    sortBtn.addEventListener("click", function () {
-      browser.runtime.sendMessage({ action: "group-sort-items", name: n }, function () {
-        touchedGroups.add(n);
-        loadGroups();
-      });
+  sortBtn.title = "Sort groups by name";
+  sortBtn.addEventListener("click", function () {
+    browser.runtime.sendMessage({ action: "sort-groups" }, function () {
+      loadGroups();
     });
-  })(name);
+  });
 
   hdr.appendChild(nameEl);
   hdr.appendChild(countEl);
@@ -615,6 +612,18 @@ $("detailCloseBtn").addEventListener("click", function () {
   renderRequestList();
   renderGroups();
   renderDetail();
+});
+
+$("removeRequestBtn").addEventListener("click", function () {
+  if (!selectedRequest) return;
+  var url = selectedRequest.url;
+  browser.runtime.sendMessage({ action: "removeRequest", url: url }, function () {
+    requestLog = requestLog.filter(function (r) { return r.url !== url; });
+    selectedRequest = null;
+    renderRequestList();
+    renderDetail();
+    updateSummary();
+  });
 });
 
 /* ═══════════════════════════ Quick Exclude ══════════════════ */
@@ -1416,7 +1425,7 @@ function updateGenPreview() {
   for (var e = from; e <= Math.min(to, from + 4); e++) {
     var base = "S" + pad2(s) + "E" + pad2(e) + ext;
     if (type === "m3u8_audio_vtt") {
-      names.push(base + "  " + base + "~Audio");
+      names.push(base + "  " + base + "-A");
     } else {
       names.push(base);
     }
@@ -1464,7 +1473,7 @@ $("genConfirmBtn").addEventListener("click", function () {
     var base = "S" + pad2(s) + "E" + pad2(e) + ext;
     if (type === "m3u8_audio_vtt") {
       entries.push({ name: base,           type: "m3u8_vtt" });
-      entries.push({ name: base + "~Audio", type: "m3u8_audio" });
+      entries.push({ name: base + "-A", type: "m3u8_audio" });
     } else {
       entries.push({ name: base, type: type });
     }
